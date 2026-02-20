@@ -59,10 +59,11 @@ function App() {
                 <Sidebar />
                 <main className="flex-1 ml-64 p-8">
                   <Routes>
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/inventory" element={<Inventory />} />
-                    <Route path="/scanner" element={<Scanner />} />
-                    <Route path="/approvals" element={<Approvals />} />
+                    <Route path="/" element={<Navigate to="/Dashboard" replace />} />
+                    <Route path="/Dashboard" element={<Dashboard />} />
+                    <Route path="/Inventory" element={<Inventory />} />
+                    <Route path="/Scanner" element={<Scanner />} />
+                    <Route path="/Approvals" element={<Approvals />} />
                   </Routes>
                 </main>
               </div>
