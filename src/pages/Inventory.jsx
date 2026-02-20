@@ -5,15 +5,14 @@ import {
 } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import {
-  Plus, Search, Filter, Download, QrCode, Edit2, Trash2,
-  X, ChevronDown, Package, AlertTriangle, CheckCircle,
-  ScanLine, Loader2, MoreVertical
+  Plus, Search, Download, QrCode, Edit2, Trash2,
+  X, AlertTriangle, Loader2
 } from 'lucide-react';
 
 // ── Categories & Locations ────────────────────────────────────────────────
 const CATEGORIES = ['Lab Equipment', 'Consumables', 'Fixed Assets', 'Construction', 'Digital', 'Furniture', 'Other'];
-const LOCATIONS   = ['Main Store', 'CS Lab', 'Physics Lab', 'Chemistry Lab', 'Admin Block', 'Library', 'Infrastructure', 'Electronics Lab'];
-const STATUSES    = ['available', 'issued', 'maintenance', 'disposed'];
+const LOCATIONS  = ['Main Block', 'Admin Block', 'CS Lab', 'ECE Lab', 'Mechanical Lab', 'Civil Lab', 'Seminar Hall', 'Hostel', 'Main Store', 'Library'];
+const STATUSES   = ['available', 'issued', 'maintenance', 'disposed'];
 
 const STATUS_STYLE = {
   available:   { dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -28,7 +27,7 @@ const EMPTY_FORM = {
   department: '', description: '', purchaseDate: '', cost: ''
 };
 
-// ── QR Code Generator (uses Google Charts API — no extra lib needed) ──────
+// ── QR Code Modal ─────────────────────────────────────────────────────────
 function QRModal({ asset, onClose }) {
   const qrData = encodeURIComponent(JSON.stringify({ id: asset.assetId, name: asset.name, location: asset.location }));
   const qrUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrData}`;
@@ -42,7 +41,7 @@ function QRModal({ asset, onClose }) {
       <h2>${asset.name}</h2>
       <p>${asset.assetId} · ${asset.location}</p>
       <img src="${qrUrl}" style="margin:20px auto;display:block"/>
-      <p>CampusAsset AI · ${new Date().toLocaleDateString()}</p>
+      <p>CampusAsset AI · Chennai Institute of Technology · ${new Date().toLocaleDateString()}</p>
       <script>window.onload=()=>window.print()</script>
       </body></html>
     `);
@@ -116,16 +115,25 @@ function AssetModal({ asset, onClose, onSave }) {
               <input required value={form.assetId} onChange={e => set('assetId', e.target.value)}
                 className={inputCls} placeholder="e.g. AST-0001" />
             </Field>
+
+            {/* Category — type or pick */}
             <Field label="Category">
-              <select value={form.category} onChange={e => set('category', e.target.value)} className={inputCls}>
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+              <input value={form.category} onChange={e => set('category', e.target.value)}
+                className={inputCls} placeholder="e.g. Lab Equipment" list="category-list" />
+              <datalist id="category-list">
+                {CATEGORIES.map(c => <option key={c} value={c} />)}
+              </datalist>
             </Field>
+
+            {/* Location — type or pick */}
             <Field label="Location">
-              <select value={form.location} onChange={e => set('location', e.target.value)} className={inputCls}>
-                {LOCATIONS.map(l => <option key={l}>{l}</option>)}
-              </select>
+              <input value={form.location} onChange={e => set('location', e.target.value)}
+                className={inputCls} placeholder="e.g. CS Lab" list="location-list" />
+              <datalist id="location-list">
+                {LOCATIONS.map(l => <option key={l} value={l} />)}
+              </datalist>
             </Field>
+
             <Field label="Quantity">
               <input type="number" min="0" value={form.quantity} onChange={e => set('quantity', Number(e.target.value))}
                 className={inputCls} />
@@ -138,14 +146,27 @@ function AssetModal({ asset, onClose, onSave }) {
               <input value={form.unit} onChange={e => set('unit', e.target.value)}
                 className={inputCls} placeholder="pcs / kg / m / box" />
             </Field>
+
+            {/* Status — type or pick */}
             <Field label="Status">
-              <select value={form.status} onChange={e => set('status', e.target.value)} className={inputCls}>
-                {STATUSES.map(s => <option key={s}>{s}</option>)}
-              </select>
+              <input value={form.status} onChange={e => set('status', e.target.value)}
+                className={inputCls} placeholder="e.g. available" list="status-list" />
+              <datalist id="status-list">
+                {STATUSES.map(s => <option key={s} value={s} />)}
+              </datalist>
             </Field>
+
             <Field label="Department">
               <input value={form.department} onChange={e => set('department', e.target.value)}
-                className={inputCls} placeholder="e.g. Computer Science" />
+                className={inputCls} placeholder="e.g. Computer Science" list="dept-list" />
+              <datalist id="dept-list">
+                <option value="Computer Science" />
+                <option value="Electronics & Communication" />
+                <option value="Mechanical" />
+                <option value="Civil" />
+                <option value="Admin" />
+                <option value="Library" />
+              </datalist>
             </Field>
             <Field label="Cost (₹)">
               <input type="number" value={form.cost} onChange={e => set('cost', e.target.value)}
@@ -177,6 +198,8 @@ function AssetModal({ asset, onClose, onSave }) {
     </div>
   );
 }
+
+// ── Asset Row ─────────────────────────────────────────────────────────────
 const AssetRow = React.memo(function AssetRow({ asset, onEdit, onDelete, onQr }) {
   const st = STATUS_STYLE[asset.status] || STATUS_STYLE.available;
   const isLow = asset.quantity <= asset.minQuantity;
@@ -217,39 +240,40 @@ const AssetRow = React.memo(function AssetRow({ asset, onEdit, onDelete, onQr })
     </tr>
   );
 });
+
 // ── Main Inventory Page ───────────────────────────────────────────────────
 export default function Inventory() {
-  const [assets, setAssets]         = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterCat, setFilterCat]   = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [showModal, setShowModal]   = useState(false);
-  const [editAsset, setEditAsset]   = useState(null);
-  const [qrAsset, setQrAsset]       = useState(null);
-  const [menuId, setMenuId]         = useState(null);
+  const [assets, setAssets]                     = useState([]);
+  const [loading, setLoading]                   = useState(true);
+  const [search, setSearch]                     = useState('');
+  const [debouncedSearch, setDebouncedSearch]   = useState('');
+  const [filterCat, setFilterCat]               = useState('All');
+  const [filterStatus, setFilterStatus]         = useState('All');
+  const [showModal, setShowModal]               = useState(false);
+  const [editAsset, setEditAsset]               = useState(null);
+  const [qrAsset, setQrAsset]                   = useState(null);
 
-  // ── Real-time Firestore listener ────────────────────────────────────────
- useEffect(() => {
-  const t = setTimeout(() => setDebouncedSearch(search), 300);
-  return () => clearTimeout(t);
-}, [search]);
-useEffect(() => {
-  const q = query(collection(db, 'assets'), orderBy('createdAt', 'desc'), limit(100));
-  const unsub = onSnapshot(q, (snap) => {
-    const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
-    setAssets(data.length ? data : DEMO_ASSETS);
-    setLoading(false);
-  }, () => {
-    setAssets(DEMO_ASSETS);
-    setLoading(false);
-  });
-  return () => unsub();
-}, []);
+  // ── Debounce search ───────────────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
+  // ── Firestore listener ────────────────────────────────────────────────
+  useEffect(() => {
+    const q = query(collection(db, 'assets'), orderBy('createdAt', 'desc'), limit(100));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+      setAssets(data.length ? data : DEMO_ASSETS);
+      setLoading(false);
+    }, () => {
+      setAssets(DEMO_ASSETS);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
-  // ── CRUD ────────────────────────────────────────────────────────────────
+  // ── CRUD ──────────────────────────────────────────────────────────────
   const handleSave = useCallback(async (form) => {
     if (editAsset?.firestoreId) {
       await updateDoc(doc(db, 'assets', editAsset.firestoreId), { ...form, updatedAt: serverTimestamp() });
@@ -266,31 +290,30 @@ useEffect(() => {
     } else {
       setAssets(a => a.filter(x => x.assetId !== asset.assetId));
     }
-    setMenuId(null);
   }, []);
 
-  // ── Filtering ───────────────────────────────────────────────────────────
+  // ── Filtering ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => assets.filter(a => {
-  const matchSearch = a.name?.toLowerCase().includes(search.toLowerCase()) ||
-                      a.assetId?.toLowerCase().includes(search.toLowerCase()) ||
-                      a.department?.toLowerCase().includes(search.toLowerCase());
-  const matchCat    = filterCat    === 'All' || a.category === filterCat;
-  const matchStatus = filterStatus === 'All' || a.status   === filterStatus;
-  return matchSearch && matchCat && matchStatus;
-}), [assets, debouncedSearch, filterCat, filterStatus]);
+    const matchSearch = a.name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                        a.assetId?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                        a.department?.toLowerCase().includes(debouncedSearch.toLowerCase());
+    const matchCat    = filterCat    === 'All' || a.category === filterCat;
+    const matchStatus = filterStatus === 'All' || a.status   === filterStatus;
+    return matchSearch && matchCat && matchStatus;
+  }), [assets, debouncedSearch, filterCat, filterStatus]);
 
-const lowStockCount = useMemo(() => 
-  assets.filter(a => a.quantity <= a.minQuantity).length,
-[assets]);
+  const lowStockCount = useMemo(() =>
+    assets.filter(a => a.quantity <= a.minQuantity).length,
+  [assets]);
 
-  // ── CSV Export ──────────────────────────────────────────────────────────
+  // ── CSV Export ────────────────────────────────────────────────────────
   const exportCSV = () => {
     const headers = ['Asset ID','Name','Category','Location','Quantity','Unit','Status','Department','Cost','Purchase Date'];
     const rows = filtered.map(a => [a.assetId, a.name, a.category, a.location, a.quantity, a.unit, a.status, a.department, a.cost, a.purchaseDate]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a'); a.href = url; a.download = 'inventory.csv'; a.click();
+    const a    = document.createElement('a'); a.href = url; a.download = 'cit-inventory.csv'; a.click();
   };
 
   if (loading) return (
@@ -301,12 +324,14 @@ const lowStockCount = useMemo(() =>
 
   return (
     <div className="space-y-6">
-
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Inventory</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{assets.length} total assets · {lowStockCount > 0 && <span className="text-amber-500 font-semibold">{lowStockCount} low stock</span>}</p>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {assets.length} total assets ·{' '}
+            {lowStockCount > 0 && <span className="text-amber-500 font-semibold">{lowStockCount} low stock</span>}
+          </p>
         </div>
         <div className="flex gap-3">
           <button onClick={exportCSV}
@@ -320,7 +345,7 @@ const lowStockCount = useMemo(() =>
         </div>
       </div>
 
-      {/* ── Filters ── */}
+      {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-3 text-gray-400"/>
@@ -340,7 +365,7 @@ const lowStockCount = useMemo(() =>
         </select>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -352,35 +377,31 @@ const lowStockCount = useMemo(() =>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-  {filtered.length === 0 ? (
-    <tr><td colSpan={8} className="text-center py-16 text-gray-400 text-sm">No assets found</td></tr>
-  ) : filtered.map((asset) => (
-    <AssetRow
-      key={asset.assetId}
-      asset={asset}
-      onQr={setQrAsset}
-      onEdit={(a) => { setEditAsset(a); setShowModal(true); }}
-      onDelete={handleDelete}
-    />
-  ))}
-</tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-16 text-gray-400 text-sm">No assets found</td></tr>
+              ) : filtered.map((asset) => (
+                <AssetRow
+                  key={asset.assetId}
+                  asset={asset}
+                  onQr={setQrAsset}
+                  onEdit={(a) => { setEditAsset(a); setShowModal(true); }}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </tbody>
           </table>
         </div>
-
-        {/* Footer */}
         <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
           <p className="text-xs text-gray-400">Showing <strong>{filtered.length}</strong> of <strong>{assets.length}</strong> assets</p>
-          <div className="flex items-center gap-4 text-xs text-gray-400">
-            {lowStockCount > 0 && (
-              <span className="flex items-center gap-1 text-amber-500 font-semibold">
-                <AlertTriangle size={12}/> {lowStockCount} items need reorder
-              </span>
-            )}
-          </div>
+          {lowStockCount > 0 && (
+            <span className="flex items-center gap-1 text-amber-500 font-semibold text-xs">
+              <AlertTriangle size={12}/> {lowStockCount} items need reorder
+            </span>
+          )}
         </div>
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {showModal && (
         <AssetModal
           asset={editAsset}
@@ -393,12 +414,14 @@ const lowStockCount = useMemo(() =>
   );
 }
 
-// ── Demo Data (shown when Firestore is empty) ─────────────────────────────
+// ── Demo Data — CIT Chennai ───────────────────────────────────────────────
 const DEMO_ASSETS = [
-  { firestoreId: 'd1', _demo: true, assetId: 'AST-0001', name: 'Dell OptiPlex 7090', category: 'Fixed Assets',   location: 'CS Lab',       quantity: 24, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Computer Science', description: 'Core i7, 16GB RAM', purchaseDate: '2023-06-15', cost: '45000' },
-  { firestoreId: 'd2', _demo: true, assetId: 'AST-0002', name: 'Oscilloscope DS1054Z', category: 'Lab Equipment', location: 'Electronics Lab', quantity: 6, minQuantity: 2, unit: 'pcs', status: 'issued',      department: 'Electronics', description: '4-channel 50MHz', purchaseDate: '2022-11-20', cost: '28000' },
-  { firestoreId: 'd3', _demo: true, assetId: 'AST-0003', name: 'Printer Toner HP 85A', category: 'Consumables',  location: 'Main Store',   quantity: 3,  minQuantity: 10, unit: 'box', status: 'available',   department: 'Admin', description: '', purchaseDate: '2024-01-10', cost: '1200' },
-  { firestoreId: 'd4', _demo: true, assetId: 'AST-0004', name: 'Projector BenQ MX522', category: 'Fixed Assets', location: 'Seminar Hall', quantity: 4,  minQuantity: 2,  unit: 'pcs', status: 'maintenance', department: 'Admin', description: 'XGA 3300 lumens', purchaseDate: '2021-08-05', cost: '35000' },
-  { firestoreId: 'd5', _demo: true, assetId: 'AST-0005', name: 'Microscope Slides',    category: 'Consumables',  location: 'Chemistry Lab',quantity: 5,  minQuantity: 20, unit: 'box', status: 'available',   department: 'Biology', description: 'Pack of 72', purchaseDate: '2024-02-01', cost: '450' },
-  { firestoreId: 'd6', _demo: true, assetId: 'AST-0006', name: 'Network Switch 24P',   category: 'Digital',      location: 'CS Lab',       quantity: 3,  minQuantity: 1,  unit: 'pcs', status: 'available',   department: 'IT', description: 'Cisco SG110-24', purchaseDate: '2023-03-18', cost: '12000' },
+  { firestoreId: 'd1', _demo: true, assetId: 'CIT-0001', name: 'Dell OptiPlex 7090',         category: 'Fixed Assets',  location: 'CS Lab',        quantity: 20, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Computer Science',          description: 'Core i7, 16GB RAM', purchaseDate: '2023-06-15', cost: '45000' },
+  { firestoreId: 'd2', _demo: true, assetId: 'CIT-0002', name: 'Digital Oscilloscope',        category: 'Lab Equipment', location: 'ECE Lab',        quantity: 8,  minQuantity: 2,  unit: 'pcs', status: 'issued',      department: 'Electronics & Communication', description: '4-channel 50MHz',   purchaseDate: '2022-11-20', cost: '28000' },
+  { firestoreId: 'd3', _demo: true, assetId: 'CIT-0003', name: 'Printer Toner HP 85A',        category: 'Consumables',   location: 'Admin Block',   quantity: 3,  minQuantity: 10, unit: 'box', status: 'available',   department: 'Admin',                     description: '',                  purchaseDate: '2024-01-10', cost: '1200'  },
+  { firestoreId: 'd4', _demo: true, assetId: 'CIT-0004', name: 'Projector BenQ MX522',        category: 'Fixed Assets',  location: 'Seminar Hall',  quantity: 4,  minQuantity: 2,  unit: 'pcs', status: 'maintenance', department: 'Admin',                     description: 'XGA 3300 lumens',   purchaseDate: '2021-08-05', cost: '35000' },
+  { firestoreId: 'd5', _demo: true, assetId: 'CIT-0005', name: 'Vernier Caliper',             category: 'Lab Equipment', location: 'Mechanical Lab',quantity: 15, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Mechanical',                description: '0-150mm range',     purchaseDate: '2023-03-10', cost: '2500'  },
+  { firestoreId: 'd6', _demo: true, assetId: 'CIT-0006', name: 'AutoCAD Workstation',         category: 'Fixed Assets',  location: 'Civil Lab',     quantity: 10, minQuantity: 3,  unit: 'pcs', status: 'available',   department: 'Civil',                     description: 'Licensed AutoCAD',  purchaseDate: '2023-07-22', cost: '55000' },
+  { firestoreId: 'd7', _demo: true, assetId: 'CIT-0007', name: 'Arduino Uno Kit',             category: 'Lab Equipment', location: 'ECE Lab',        quantity: 25, minQuantity: 10, unit: 'pcs', status: 'available',   department: 'Electronics & Communication', description: 'With breadboard',   purchaseDate: '2024-01-05', cost: '800'   },
+  { firestoreId: 'd8', _demo: true, assetId: 'CIT-0008', name: 'Whiteboard Markers (Box)',    category: 'Consumables',   location: 'Main Block',    quantity: 9,  minQuantity: 30, unit: 'box', status: 'available',   department: 'Admin',                     description: 'Multicolor set',   purchaseDate: '2024-02-01', cost: '350'   },
 ];
