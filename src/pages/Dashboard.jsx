@@ -1,29 +1,37 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, getCountFromServer, query, where } from 'firebase/firestore';
+import { collection, getCountFromServer, query, where } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 
 const STOCK_DATA = [
-  { month: 'Aug', in: 420, out: 310 },
-  { month: 'Sep', in: 380, out: 290 },
-  { month: 'Oct', in: 510, out: 400 },
-  { month: 'Nov', in: 470, out: 360 },
-  { month: 'Dec', in: 530, out: 410 },
-  { month: 'Jan', in: 490, out: 370 },
+  { month: 'Aug', in: 340, out: 240 },
+  { month: 'Sep', in: 410, out: 300 },
+  { month: 'Oct', in: 480, out: 370 },
+  { month: 'Nov', in: 430, out: 320 },
+  { month: 'Dec', in: 260, out: 190 },
+  { month: 'Jan', in: 500, out: 390 },
 ];
 
 const ACTIVITY = [
-  { action: 'Issued',    name: 'Dell OptiPlex 7090',    dept: 'CS Lab',       time: '2 min ago',  color: '#eff6ff', text: '#1d4ed8' },
-  { action: 'Returned',  name: 'Oscilloscope DS1054Z',  dept: 'Electronics',  time: '18 min ago', color: '#f0fdf4', text: '#166534' },
-  { action: 'Restocked', name: 'PVC Conduit (50m)',     dept: 'Store',        time: '1 hr ago',   color: '#f5f3ff', text: '#5b21b6' },
-  { action: 'Pending',   name: 'Projector BenQ MX522',  dept: 'Seminar Hall', time: '2 hr ago',   color: '#fffbeb', text: '#92400e' },
-  { action: 'Approved',  name: 'Lab Coat (Batch)',      dept: 'Chemistry',    time: '3 hr ago',   color: '#f0fdf4', text: '#065f46' },
+  { action: 'Issued',    name: 'Arduino Uno Kit (Set of 15)',   dept: 'ECE Lab',        time: '4 min ago',  color: '#eff6ff', text: '#1d4ed8' },
+  { action: 'Returned',  name: 'AutoCAD Workstation',           dept: 'Civil CAD Lab',  time: '20 min ago', color: '#f0fdf4', text: '#166534' },
+  { action: 'Restocked', name: 'A4 Paper Ream (500 sheets)',    dept: 'Admin Block',    time: '1 hr ago',   color: '#f5f3ff', text: '#5b21b6' },
+  { action: 'Pending',   name: 'Projector Lamp Replacement',    dept: 'Seminar Hall',   time: '2 hr ago',   color: '#fffbeb', text: '#92400e' },
+  { action: 'Approved',  name: 'Vernier Caliper Set (20 pcs)',  dept: 'Mechanical Lab', time: '3 hr ago',   color: '#f0fdf4', text: '#065f46' },
 ];
 
 const LOW_STOCK = [
-  { name: 'Printer Toner HP 85A', qty: 3,  min: 10, dept: 'Admin' },
-  { name: 'Microscope Slides',    qty: 5,  min: 20, dept: 'Biology' },
-  { name: 'Safety Gloves (M)',    qty: 8,  min: 25, dept: 'Chemistry' },
-  { name: 'Network Cables Cat6',  qty: 12, min: 30, dept: 'IT' },
+  { name: 'Printer Toner HP 85A',     qty: 2,  min: 10, dept: 'Admin Block' },
+  { name: 'Soldering Wire (500g)',     qty: 3,  min: 15, dept: 'ECE Lab' },
+  { name: 'Safety Helmets',           qty: 5,  min: 20, dept: 'Civil Lab' },
+  { name: 'Whiteboard Markers (Box)', qty: 9,  min: 30, dept: 'Main Block' },
+];
+
+const DEPT_USAGE = [
+  ['Computer Science',          320, 85],
+  ['Electronics & Communication', 280, 72],
+  ['Mechanical',                190, 50],
+  ['Civil',                     160, 42],
+  ['Admin',                     110, 30],
 ];
 
 const KPICard = ({ icon, label, value, sub, trend, bg }) => (
@@ -39,33 +47,27 @@ const KPICard = ({ icon, label, value, sub, trend, bg }) => (
 );
 
 const Dashboard = () => {
-  const [stats, setStats] = useState({ totalAssets: 1247, lowStock: 14, pendingApprovals: 7, activeIssued: 342 });
+  const [stats, setStats] = useState({ totalAssets: 1624, lowStock: 16, pendingApprovals: 8, activeIssued: 374 });
 
   useEffect(() => {
-   const fetchStats = async () => {
-  try {
-    const [
-      assetsCount,
-      lowStockSnap,
-      pendingCount,
-      issuedCount
-    ] = await Promise.all([
-      getCountFromServer(collection(db, 'assets')),
-      getCountFromServer(query(collection(db, 'assets'), where('quantity', '<=', 10))),
-      getCountFromServer(query(collection(db, 'approvals'), where('status', '==', 'pending'))),
-      getCountFromServer(query(collection(db, 'assets'), where('status', '==', 'issued'))),
-    ]);
-
-    setStats({
-      totalAssets:       assetsCount.data().count      || 1247,
-      lowStock:          lowStockSnap.data().count      || 14,
-      pendingApprovals:  pendingCount.data().count      || 7,
-      activeIssued:      issuedCount.data().count       || 342,
-    });
-  } catch {
-    // fallback to demo data
-  }
-};
+    const fetchStats = async () => {
+      try {
+        const [assetsCount, lowStockSnap, pendingCount, issuedCount] = await Promise.all([
+          getCountFromServer(collection(db, 'assets')),
+          getCountFromServer(query(collection(db, 'assets'), where('quantity', '<=', 10))),
+          getCountFromServer(query(collection(db, 'approvals'), where('status', '==', 'pending'))),
+          getCountFromServer(query(collection(db, 'assets'), where('status', '==', 'issued'))),
+        ]);
+        setStats({
+          totalAssets:      assetsCount.data().count   || 1624,
+          lowStock:         lowStockSnap.data().count  || 16,
+          pendingApprovals: pendingCount.data().count  || 8,
+          activeIssued:     issuedCount.data().count   || 374,
+        });
+      } catch {
+        // fallback to demo data
+      }
+    };
     fetchStats();
   }, []);
 
@@ -77,7 +79,7 @@ const Dashboard = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Operations Overview</h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>{today}</p>
+          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>Chennai Institute of Technology · {today}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#166534' }}>
           🟢 All Systems Operational
@@ -86,10 +88,10 @@ const Dashboard = () => {
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
-        <KPICard icon="📦" label="Total Assets"      value={stats.totalAssets.toLocaleString()} sub="Across all departments" trend={4.2}  bg="#eff6ff" />
-        <KPICard icon="⚠️" label="Low Stock Alerts"  value={stats.lowStock}                     sub="Requires reorder"      trend={-2}   bg="#fffbeb" />
-        <KPICard icon="⏱️" label="Pending Approvals" value={stats.pendingApprovals}              sub="Awaiting action"                    bg="#f5f3ff" />
-        <KPICard icon="⚡" label="Currently Issued"  value={stats.activeIssued}                 sub="Items in use"          trend={1.8}  bg="#f0fdfa" />
+        <KPICard icon="📦" label="Total Assets"      value={stats.totalAssets.toLocaleString()} sub="Across all departments"   trend={3.8}  bg="#eff6ff" />
+        <KPICard icon="⚠️" label="Low Stock Alerts"  value={stats.lowStock}                     sub="Requires reorder"         trend={-2}   bg="#fffbeb" />
+        <KPICard icon="⏱️" label="Pending Approvals" value={stats.pendingApprovals}              sub="Awaiting HOD action"                   bg="#f5f3ff" />
+        <KPICard icon="⚡" label="Currently Issued"  value={stats.activeIssued}                 sub="Items in use"             trend={2.1}  bg="#f0fdfa" />
       </div>
 
       {/* Charts Row */}
@@ -98,7 +100,7 @@ const Dashboard = () => {
         {/* Stock Movement Bar Chart */}
         <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #f1f5f9', padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,.04)' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Stock Movement</div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>Inflow vs outflow — last 6 months</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>Inflow vs outflow — Aug 2024 to Jan 2025</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 140 }}>
             {STOCK_DATA.map((d, i) => (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
@@ -126,12 +128,20 @@ const Dashboard = () => {
             <circle cx="60" cy="60" r="40" fill="none" stroke="#06b6d4" strokeWidth="20" strokeDasharray="55 196" strokeDashoffset="-155"/>
             <circle cx="60" cy="60" r="40" fill="none" stroke="#f59e0b" strokeWidth="20" strokeDasharray="25 226" strokeDashoffset="-210"/>
             <circle cx="60" cy="60" r="40" fill="none" stroke="#10b981" strokeWidth="20" strokeDasharray="16 235" strokeDashoffset="-235"/>
-            <text x="60" y="64" textAnchor="middle" fontSize="10" fontWeight="700" fill="#1e293b">1,247</text>
+            <text x="60" y="64" textAnchor="middle" fontSize="10" fontWeight="700" fill="#1e293b">1,624</text>
           </svg>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {[['#3b82f6','Lab Equipment','34%'],['#8b5cf6','Consumables','28%'],['#06b6d4','Fixed Assets','22%'],['#f59e0b','Construction','10%'],['#10b981','Digital','6%']].map(([c,l,v]) => (
+            {[
+              ['#3b82f6', 'Lab Equipment',  '34%'],
+              ['#8b5cf6', 'Consumables',    '28%'],
+              ['#06b6d4', 'Fixed Assets',   '22%'],
+              ['#f59e0b', 'Construction',   '10%'],
+              ['#10b981', 'Digital',         '6%'],
+            ].map(([c, l, v]) => (
               <div key={l} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{l}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{l}
+                </span>
                 <span style={{ fontWeight: 700, color: '#1e293b' }}>{v}</span>
               </div>
             ))}
@@ -190,7 +200,7 @@ const Dashboard = () => {
           <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>Dept. Usage</div>
           <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 14 }}>Items issued per department</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[['Science',320,85],['Engineering',280,72],['Admin',190,50],['Infrastructure',240,62],['Library',110,30]].map(([dept,val,pct]) => (
+            {DEPT_USAGE.map(([dept, val, pct]) => (
               <div key={dept}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                   <span style={{ fontSize: 12, color: '#475569', fontWeight: 500 }}>{dept}</span>
