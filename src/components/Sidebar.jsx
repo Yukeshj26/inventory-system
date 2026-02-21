@@ -36,6 +36,7 @@ export default function Sidebar() {
           </div>
           <div>
             <p className="text-white font-bold text-sm leading-none">TraceSphere</p>
+            <p className="text-blue-400 text-xs">Inventory Platform</p>
           </div>
         </div>
       </div>
