@@ -35,8 +35,7 @@ export default function Sidebar() {
             <ShieldCheck size={18} className="text-white" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-none">CampusAsset</p>
-            <p className="text-blue-400 text-xs mt-0.5">AI Platform</p>
+            <p className="text-white font-bold text-sm leading-none">TraceSphere</p>
           </div>
         </div>
       </div>
