@@ -41,7 +41,7 @@ function QRModal({ asset, onClose }) {
       <h2>${asset.name}</h2>
       <p>${asset.assetId} · ${asset.location}</p>
       <img src="${qrUrl}" style="margin:20px auto;display:block"/>
-      <p>CampusAsset AI · Chennai Institute of Technology · ${new Date().toLocaleDateString()}</p>
+      <p>TraceSphere · Chennai Institute of Technology · ${new Date().toLocaleDateString()}</p>
       <script>window.onload=()=>window.print()</script>
       </body></html>
     `);
@@ -74,12 +74,6 @@ function QRModal({ asset, onClose }) {
 }
 
 // ── Add / Edit Modal ──────────────────────────────────────────────────────
-const Field = ({ label, children }) => (
-    <div>
-      <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1">{label}</label>
-      {children}
-    </div>
-  );
 function AssetModal({ asset, onClose, onSave }) {
   const [form, setForm] = useState(asset || EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -93,6 +87,13 @@ function AssetModal({ asset, onClose, onSave }) {
     setSaving(false);
     onClose();
   };
+
+  const Field = ({ label, children }) => (
+    <div>
+      <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1">{label}</label>
+      {children}
+    </div>
+  );
 
   const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition";
 

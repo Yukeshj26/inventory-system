@@ -1,40 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth } from './services/firebaseConfig';
-
-// Components
 import Sidebar from './components/Sidebar';
-
-// Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Procurement from './pages/Procurement';
 import Inventory from './pages/Inventory';
 import Scanner from './pages/Scanner';
 import Approvals from './pages/Approvals';
+import Reports  from './pages/Reports';
+import Settings from './pages/Settings';
 
 function App() {
-  const [user, setUser] = useState(() => {
-    const cached = localStorage.getItem('authUser');
-    return cached ? JSON.parse(cached) : null;
-  });
-  const [loading, setLoading] = useState(!localStorage.getItem('authUser'));
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-      if (firebaseUser) {
-        const cached = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-        };
-        localStorage.setItem('authUser', JSON.stringify(cached));
-        setUser(firebaseUser);
-      } else {
-        localStorage.removeItem('authUser');
-        setUser(null);
-      }
+      setUser(firebaseUser);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -49,8 +32,8 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-
+        {/* ✅ redirect to / not /Dashboard */}
+        <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
         <Route
           path="/*"
           element={
@@ -59,16 +42,19 @@ function App() {
                 <Sidebar />
                 <main className="flex-1 ml-64 p-8">
                   <Routes>
-                    <Route path="/" element={<Navigate to="/Dashboard" replace />} />
-                    <Route path="/Dashboard" element={<Dashboard />} />
-                    <Route path="/Inventory" element={<Inventory />} />
-                    <Route path="/Scanner" element={<Scanner />} />
-                    <Route path="/Approvals" element={<Approvals />} />
+                    <Route index element={<Dashboard />} />
+                    {/* ✅ no leading slash on nested routes */}
+                    <Route path="inventory"  element={<Inventory />} />
+                    <Route path="scanner"    element={<Scanner />} />
+                    <Route path="approvals"  element={<Approvals />} />
+                    <Route path="procurement" element={<Procurement />} />
+                    <Route path="reports"   element={<Reports />} />
+                    <Route path="settings"  element={<Settings />} />
                   </Routes>
                 </main>
               </div>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/login" replace />
             )
           }
         />

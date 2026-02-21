@@ -102,7 +102,7 @@ const Login = () => {
         <div>
           <div className="flex items-center space-x-3 mb-8">
             <ShieldCheck size={32} />
-            <span className="text-2xl font-bold">CampusAsset AI</span>
+            <span className="text-2xl font-bold">TraceSphere</span>
           </div>
           <h1 className="text-4xl font-bold">Unified Inventory Control</h1>
           <p className="mt-4 text-blue-100">Traceability, Transparency, and Predictive Restocking.</p>

@@ -10,8 +10,9 @@ import {
 const NAV = [
   { to: '/',           icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/inventory',  icon: Package,         label: 'Inventory' },
-  { to: '/scanner',    icon: ScanLine,        label: 'QR Scanner' },
   { to: '/approvals',  icon: ClipboardCheck,  label: 'Approvals' },
+  { to: '/procurement', icon: Package, label: 'Procurement' },
+  { to: '/scanner',    icon: ScanLine,        label: 'QR Scanner' },
   { to: '/reports',    icon: BarChart3,       label: 'Reports' },
   { to: '/settings',   icon: Settings,        label: 'Settings' },
 ];
