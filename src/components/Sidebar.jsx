@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { auth } from '../services/firebaseConfig';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { useEffect } from 'react';
 import {
   LayoutDashboard, Package, ScanLine, ClipboardCheck,
   BarChart3, Settings, LogOut, ShieldCheck, ChevronRight
@@ -19,8 +20,11 @@ const NAV = [
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const user = auth.currentUser;
-
+  const [user, setUser] = useState(auth.currentUser);
+ useEffect(() => {
+    const unsub = auth.onAuthStateChanged(setUser);
+    return () => unsub();
+  }, []);
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/login');

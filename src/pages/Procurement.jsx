@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   collection, addDoc, updateDoc, doc,
   onSnapshot, serverTimestamp, query, orderBy
@@ -7,19 +7,19 @@ import { db, auth } from '../services/firebaseConfig';
 import {
   Plus, X, Search, Download, Loader2,
   Package, Truck, CheckCircle2, Clock,
-  AlertCircle, ChevronRight, Building2,
-  Calendar, DollarSign, FileText, Filter
+  AlertCircle, Building2, Calendar,
+  DollarSign, FileText
 } from 'lucide-react';
 
-// ── Constants ──────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────
 const STATUSES = ['pending', 'approved', 'ordered', 'delivered', 'cancelled'];
 
 const STATUS_CONFIG = {
-  pending:   { label: 'Pending',   bg: '#fffbeb', color: '#92400e', border: '#fde68a', icon: Clock },
+  pending:   { label: 'Pending',   bg: '#fffbeb', color: '#92400e', border: '#fde68a', icon: Clock        },
   approved:  { label: 'Approved',  bg: '#f0fdf4', color: '#166534', border: '#bbf7d0', icon: CheckCircle2 },
-  ordered:   { label: 'Ordered',   bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', icon: Truck },
-  delivered: { label: 'Delivered', bg: '#f0fdfa', color: '#065f46', border: '#99f6e4', icon: Package },
-  cancelled: { label: 'Cancelled', bg: '#fef2f2', color: '#991b1b', border: '#fecaca', icon: AlertCircle },
+  ordered:   { label: 'Ordered',   bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', icon: Truck        },
+  delivered: { label: 'Delivered', bg: '#f0fdfa', color: '#065f46', border: '#99f6e4', icon: Package      },
+  cancelled: { label: 'Cancelled', bg: '#fef2f2', color: '#991b1b', border: '#fecaca', icon: AlertCircle  },
 };
 
 const CATEGORIES = ['Lab Equipment', 'Consumables', 'Fixed Assets', 'Construction', 'Digital', 'Furniture', 'Other'];
@@ -31,15 +31,30 @@ const EMPTY_FORM = {
   notes: '', priority: 'medium',
 };
 
+// ── Shared — outside all components to prevent cursor loss ────────────────
+const inputSx = {
+  width: '100%', padding: '9px 12px', background: '#f8fafc',
+  border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13,
+  outline: 'none', fontFamily: 'inherit',
+};
+
+const Field = ({ label, children }) => (
+  <div>
+    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</label>
+    {children}
+  </div>
+);
+
+// ── Demo Data ─────────────────────────────────────────────────────────────
 const DEMO_ORDERS = [
-  { id: 'd1', poNumber: 'PO-2024-001', itemName: 'Dell OptiPlex 7090', category: 'Fixed Assets', supplier: 'TechMart India', quantity: 5, unit: 'pcs', unitCost: 45000, department: 'CS Lab', expectedDate: '2024-03-01', status: 'delivered', priority: 'high', notes: 'Core i7, 16GB RAM', createdAt: '2024-01-15', requestedBy: 'Admin' },
-  { id: 'd2', poNumber: 'PO-2024-002', itemName: 'Arduino Mega 2560', category: 'Lab Equipment', supplier: 'DigiSource', quantity: 20, unit: 'pcs', unitCost: 1200, department: 'Electronics', expectedDate: '2024-02-20', status: 'ordered', priority: 'medium', notes: '', createdAt: '2024-02-01', requestedBy: 'Priya Nair' },
-  { id: 'd3', poNumber: 'PO-2024-003', itemName: 'Safety Goggles', category: 'Consumables', supplier: 'SafetyFirst', quantity: 50, unit: 'pcs', unitCost: 150, department: 'Chemistry', expectedDate: '2024-02-25', status: 'approved', priority: 'high', notes: 'ANSI certified', createdAt: '2024-02-10', requestedBy: 'Dr. Mehta' },
-  { id: 'd4', poNumber: 'PO-2024-004', itemName: 'Printer Toner HP 85A', category: 'Consumables', supplier: 'OfficeWorld', quantity: 10, unit: 'box', unitCost: 1200, department: 'Admin', expectedDate: '2024-02-18', status: 'pending', priority: 'high', notes: '', createdAt: '2024-02-12', requestedBy: 'Ravi Kumar' },
-  { id: 'd5', poNumber: 'PO-2024-005', itemName: 'Oscilloscope DS1054Z', category: 'Lab Equipment', supplier: 'LabSupply Co.', quantity: 3, unit: 'pcs', unitCost: 28000, department: 'Electronics', expectedDate: '2024-03-10', status: 'cancelled', priority: 'low', notes: 'Budget constraint', createdAt: '2024-02-05', requestedBy: 'Admin' },
+  { id: 'd1', poNumber: 'PO-2024-001', itemName: 'Dell OptiPlex 7090',   category: 'Fixed Assets',  supplier: 'TechMart India', quantity: 5,  unit: 'pcs', unitCost: 45000, department: 'CS Lab',      expectedDate: '2024-03-01', status: 'delivered', priority: 'high',   notes: 'Core i7, 16GB RAM',  createdAt: '2024-01-15', requestedBy: 'Admin'      },
+  { id: 'd2', poNumber: 'PO-2024-002', itemName: 'Arduino Mega 2560',    category: 'Lab Equipment', supplier: 'DigiSource',     quantity: 20, unit: 'pcs', unitCost: 1200,  department: 'Electronics', expectedDate: '2024-02-20', status: 'ordered',   priority: 'medium', notes: '',                   createdAt: '2024-02-01', requestedBy: 'Priya Nair' },
+  { id: 'd3', poNumber: 'PO-2024-003', itemName: 'Safety Goggles',       category: 'Consumables',   supplier: 'SafetyFirst',    quantity: 50, unit: 'pcs', unitCost: 150,   department: 'Chemistry',   expectedDate: '2024-02-25', status: 'approved',  priority: 'high',   notes: 'ANSI certified',     createdAt: '2024-02-10', requestedBy: 'Dr. Mehta'  },
+  { id: 'd4', poNumber: 'PO-2024-004', itemName: 'Printer Toner HP 85A', category: 'Consumables',   supplier: 'OfficeWorld',    quantity: 10, unit: 'box', unitCost: 1200,  department: 'Admin',       expectedDate: '2024-02-18', status: 'pending',   priority: 'high',   notes: '',                   createdAt: '2024-02-12', requestedBy: 'Ravi Kumar' },
+  { id: 'd5', poNumber: 'PO-2024-005', itemName: 'Oscilloscope DS1054Z', category: 'Lab Equipment', supplier: 'LabSupply Co.',  quantity: 3,  unit: 'pcs', unitCost: 28000, department: 'Electronics', expectedDate: '2024-03-10', status: 'cancelled', priority: 'low',    notes: 'Budget constraint',  createdAt: '2024-02-05', requestedBy: 'Admin'      },
 ];
 
-// ── Progress Tracker ───────────────────────────────────────────────────────
+// ── Progress Tracker ──────────────────────────────────────────────────────
 const STEPS = ['pending', 'approved', 'ordered', 'delivered'];
 
 function StatusTracker({ status }) {
@@ -50,7 +65,7 @@ function StatusTracker({ status }) {
     </div>
   );
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
       {STEPS.map((step, i) => {
         const done   = i <= currentIdx;
         const active = i === currentIdx;
@@ -59,13 +74,13 @@ function StatusTracker({ status }) {
         return (
           <React.Fragment key={step}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? cfg.bg : '#f1f5f9', border: `2px solid ${done ? cfg.border : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '.2s' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? cfg.bg : '#f1f5f9', border: `2px solid ${done ? cfg.border : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={13} color={done ? cfg.color : '#94a3b8'} />
               </div>
               <span style={{ fontSize: 9, fontWeight: active ? 700 : 500, color: done ? cfg.color : '#94a3b8', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{cfg.label}</span>
             </div>
             {i < STEPS.length - 1 && (
-              <div style={{ width: 32, height: 2, background: i < currentIdx ? '#bbf7d0' : '#e2e8f0', marginBottom: 14, transition: '.2s' }} />
+              <div style={{ width: 32, height: 2, background: i < currentIdx ? '#bbf7d0' : '#e2e8f0', marginBottom: 14 }} />
             )}
           </React.Fragment>
         );
@@ -74,72 +89,71 @@ function StatusTracker({ status }) {
   );
 }
 
-// ── Order Modal ────────────────────────────────────────────────────────────
+// ── Order Modal ───────────────────────────────────────────────────────────
 function OrderModal({ order, onClose, onSave }) {
-  const [form, setForm] = useState(order || EMPTY_FORM);
+  const [form, setForm]     = useState(order || EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await onSave(form);
+    await onSave({ ...form, firestoreId: order?.firestoreId, _demo: order?._demo });
     setSaving(false);
-    onClose();
   };
-
-  const inputCls = { width: '100%', padding: '9px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, outline: 'none', fontFamily: 'inherit' };
-  const Field = ({ label, children }) => (
-    <div>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</label>
-      {children}
-    </div>
-  );
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}>
       <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '22px 24px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{order ? 'Edit Purchase Order' : 'New Purchase Order'}</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20}/></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div style={{ gridColumn: '1/-1' }}>
               <Field label="Item Name *">
-                <input required value={form.itemName} onChange={e => set('itemName', e.target.value)} style={inputCls} placeholder="e.g. Safety Goggles" />
+                <input required value={form.itemName} onChange={e => set('itemName', e.target.value)} style={inputSx} placeholder="e.g. Safety Goggles" />
               </Field>
             </div>
             <Field label="PO Number">
-              <input value={form.poNumber} onChange={e => set('poNumber', e.target.value)} style={inputCls} placeholder="Auto-generated if empty" />
+              <input value={form.poNumber} onChange={e => set('poNumber', e.target.value)} style={inputSx} placeholder="Auto-generated if empty" />
             </Field>
             <Field label="Category">
-              <select value={form.category} onChange={e => set('category', e.target.value)} style={inputCls}>
+              <select value={form.category} onChange={e => set('category', e.target.value)} style={inputSx}>
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Supplier">
-              <select value={form.supplier} onChange={e => set('supplier', e.target.value)} style={inputCls}>
+              <select value={form.supplier} onChange={e => set('supplier', e.target.value)} style={inputSx}>
                 {SUPPLIERS.map(s => <option key={s}>{s}</option>)}
               </select>
             </Field>
             <Field label="Department">
-              <input value={form.department} onChange={e => set('department', e.target.value)} style={inputCls} placeholder="e.g. Chemistry" />
+              <input value={form.department} onChange={e => set('department', e.target.value)} style={inputSx} placeholder="e.g. Chemistry" list="dept-list-proc"/>
+              <datalist id="dept-list-proc">
+                <option value="Computer Science"/>
+                <option value="Electronics & Communication"/>
+                <option value="Mechanical"/>
+                <option value="Civil"/>
+                <option value="Admin"/>
+                <option value="Library"/>
+              </datalist>
             </Field>
             <Field label="Quantity">
-              <input type="number" min="1" value={form.quantity} onChange={e => set('quantity', Number(e.target.value))} style={inputCls} />
+              <input type="number" min="1" value={form.quantity} onChange={e => set('quantity', Number(e.target.value))} style={inputSx} />
             </Field>
             <Field label="Unit">
-              <input value={form.unit} onChange={e => set('unit', e.target.value)} style={inputCls} placeholder="pcs / box / kg" />
+              <input value={form.unit} onChange={e => set('unit', e.target.value)} style={inputSx} placeholder="pcs / box / kg" />
             </Field>
             <Field label="Unit Cost (₹)">
-              <input type="number" value={form.unitCost} onChange={e => set('unitCost', e.target.value)} style={inputCls} placeholder="0" />
+              <input type="number" value={form.unitCost} onChange={e => set('unitCost', e.target.value)} style={inputSx} placeholder="0" />
             </Field>
             <Field label="Expected Delivery">
-              <input type="date" value={form.expectedDate} onChange={e => set('expectedDate', e.target.value)} style={inputCls} />
+              <input type="date" value={form.expectedDate} onChange={e => set('expectedDate', e.target.value)} style={inputSx} />
             </Field>
             <Field label="Priority">
-              <select value={form.priority} onChange={e => set('priority', e.target.value)} style={inputCls}>
+              <select value={form.priority} onChange={e => set('priority', e.target.value)} style={inputSx}>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
                 <option value="low">Low</option>
@@ -147,7 +161,7 @@ function OrderModal({ order, onClose, onSave }) {
             </Field>
             <div style={{ gridColumn: '1/-1' }}>
               <Field label="Notes">
-                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} style={{ ...inputCls, resize: 'none' }} rows={2} placeholder="Additional details..." />
+                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} style={{ ...inputSx, resize: 'none' }} rows={2} placeholder="Additional details..." />
               </Field>
             </div>
           </div>
@@ -164,7 +178,7 @@ function OrderModal({ order, onClose, onSave }) {
   );
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────────────────
 export default function Procurement() {
   const [orders, setOrders]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -174,7 +188,6 @@ export default function Procurement() {
   const [filterStatus, setFilter] = useState('all');
   const [selected, setSelected]   = useState(null);
 
-  // Firestore real-time
   useEffect(() => {
     const q = query(collection(db, 'procurement'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, snap => {
@@ -185,46 +198,51 @@ export default function Procurement() {
     return () => unsub();
   }, []);
 
-  const handleSave = async (form) => {
+  const handleSave = useCallback(async (form) => {
+    setShowModal(false);
+    setEditOrder(null);
     const user = auth.currentUser;
     const poNum = form.poNumber || `PO-${Date.now().toString().slice(-6)}`;
-    if (editOrder?.firestoreId && !editOrder._demo) {
-      await updateDoc(doc(db, 'procurement', editOrder.firestoreId), { ...form, poNumber: poNum, updatedAt: serverTimestamp() });
-    } else {
-      await addDoc(collection(db, 'procurement'), {
-        ...form, poNumber: poNum, status: 'pending',
-        requestedBy: user?.displayName || user?.email || 'Unknown',
-        createdAt: serverTimestamp(),
-      });
-    }
-    setEditOrder(null);
-  };
+    try {
+      if (form.firestoreId && !form._demo) {
+        await updateDoc(doc(db, 'procurement', form.firestoreId), { ...form, poNumber: poNum, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, 'procurement'), {
+          ...form, poNumber: poNum, status: 'pending',
+          requestedBy: user?.displayName || user?.email || 'Unknown',
+          createdAt: serverTimestamp(),
+        });
+      }
+    } catch (e) { console.error('Save failed:', e); }
+  }, []);
 
-  const handleStatusChange = async (order, newStatus) => {
+  const handleStatusChange = useCallback(async (order, newStatus) => {
     if (order.firestoreId && !order._demo) {
       await updateDoc(doc(db, 'procurement', order.firestoreId), { status: newStatus, updatedAt: serverTimestamp() });
     } else {
       setOrders(o => o.map(x => x.id === order.id ? { ...x, status: newStatus } : x));
     }
     if (selected?.id === order.id) setSelected(s => ({ ...s, status: newStatus }));
-  };
+  }, [selected]);
 
-  // Stats
-  const counts = {
+  const counts = useMemo(() => ({
     total:     orders.length,
     pending:   orders.filter(o => o.status === 'pending').length,
     ordered:   orders.filter(o => o.status === 'ordered').length,
     delivered: orders.filter(o => o.status === 'delivered').length,
-  };
-  const totalSpend = orders.filter(o => o.status === 'delivered').reduce((sum, o) => sum + (o.quantity * o.unitCost || 0), 0);
+  }), [orders]);
 
-  const filtered = orders.filter(o => {
+  const totalSpend = useMemo(() =>
+    orders.filter(o => o.status === 'delivered').reduce((sum, o) => sum + (o.quantity * o.unitCost || 0), 0),
+  [orders]);
+
+  const filtered = useMemo(() => orders.filter(o => {
     const matchSearch = o.itemName?.toLowerCase().includes(search.toLowerCase()) ||
                         o.poNumber?.toLowerCase().includes(search.toLowerCase()) ||
                         o.supplier?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'all' || o.status === filterStatus;
     return matchSearch && matchStatus;
-  });
+  }), [orders, search, filterStatus]);
 
   const exportCSV = () => {
     const headers = ['PO Number','Item','Category','Supplier','Qty','Unit','Unit Cost','Total','Status','Department','Expected Date'];
@@ -232,7 +250,7 @@ export default function Procurement() {
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'procurement.csv'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = 'tracesphere-procurement.csv'; a.click();
   };
 
   if (loading) return (
@@ -249,7 +267,7 @@ export default function Procurement() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Procurement</h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>Purchase orders and supplier management</p>
+          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>TraceSphere · Purchase orders and supplier management</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
@@ -264,10 +282,10 @@ export default function Procurement() {
       {/* KPI Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
         {[
-          { label: 'Total Orders',   value: counts.total,     icon: FileText,     bg: '#eff6ff', ic: '#2563eb' },
-          { label: 'Pending',        value: counts.pending,   icon: Clock,        bg: '#fffbeb', ic: '#d97706' },
-          { label: 'In Transit',     value: counts.ordered,   icon: Truck,        bg: '#f0f9ff', ic: '#0284c7' },
-          { label: 'Total Spent',    value: `₹${(totalSpend/1000).toFixed(0)}K`, icon: DollarSign, bg: '#f0fdf4', ic: '#059669' },
+          { label: 'Total Orders', value: counts.total,     icon: FileText,   bg: '#eff6ff', ic: '#2563eb' },
+          { label: 'Pending',      value: counts.pending,   icon: Clock,      bg: '#fffbeb', ic: '#d97706' },
+          { label: 'In Transit',   value: counts.ordered,   icon: Truck,      bg: '#f0f9ff', ic: '#0284c7' },
+          { label: 'Total Spent',  value: `₹${(totalSpend/1000).toFixed(0)}K`, icon: DollarSign, bg: '#f0fdf4', ic: '#059669' },
         ].map((k, i) => {
           const Icon = k.icon;
           return (
@@ -301,7 +319,7 @@ export default function Procurement() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-              {['PO Number', 'Item', 'Supplier', 'Qty', 'Total Cost', 'Status', 'Expected', 'Actions'].map(h => (
+              {['PO Number','Item','Supplier','Qty','Total Cost','Status','Expected','Actions'].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -315,7 +333,8 @@ export default function Procurement() {
               const total = (order.quantity * order.unitCost) || 0;
               const isOverdue = order.expectedDate && new Date(order.expectedDate) < new Date() && !['delivered','cancelled'].includes(order.status);
               return (
-                <tr key={order.id || order.firestoreId} style={{ borderBottom: '1px solid #f8fafc', transition: '.15s', cursor: 'pointer' }}
+                <tr key={order.id || order.firestoreId}
+                  style={{ borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#fafbff'}
                   onMouseLeave={e => e.currentTarget.style.background = ''}
                   onClick={() => setSelected(order)}>
@@ -340,15 +359,14 @@ export default function Procurement() {
                   </td>
                   <td style={{ padding: '13px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: isOverdue ? '#dc2626' : '#64748b', fontWeight: isOverdue ? 600 : 400 }}>
-                      <Calendar size={12} /> {order.expectedDate || '—'}
-                      {isOverdue && ' ⚠'}
+                      <Calendar size={12} /> {order.expectedDate || '—'}{isOverdue && ' ⚠'}
                     </div>
                   </td>
                   <td style={{ padding: '13px 16px' }}>
                     <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
                       <button onClick={() => { setEditOrder(order); setShowModal(true); }}
                         style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 11, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Edit</button>
-                      {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                      {!['delivered','cancelled'].includes(order.status) && (
                         <select value={order.status} onChange={e => handleStatusChange(order, e.target.value)}
                           style={{ padding: '5px 8px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: 11, color: '#475569', cursor: 'pointer', outline: 'none' }}>
                           {STATUSES.map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
@@ -374,26 +392,22 @@ export default function Procurement() {
             <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Order Details</div>
             <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
           </div>
-
-          {/* Status Tracker */}
           <div style={{ background: '#f8fafc', borderRadius: 14, padding: 16, marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '.05em' }}>Order Progress</div>
             <StatusTracker status={selected.status} />
           </div>
-
-          {/* Details */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              ['PO Number',   selected.poNumber],
-              ['Item',        selected.itemName],
-              ['Category',    selected.category],
-              ['Supplier',    selected.supplier],
-              ['Department',  selected.department],
-              ['Quantity',    `${selected.quantity} ${selected.unit}`],
-              ['Unit Cost',   `₹${Number(selected.unitCost || 0).toLocaleString()}`],
-              ['Total Cost',  `₹${(selected.quantity * selected.unitCost || 0).toLocaleString()}`],
-              ['Priority',    selected.priority],
-              ['Expected',    selected.expectedDate || '—'],
+              ['PO Number',    selected.poNumber],
+              ['Item',         selected.itemName],
+              ['Category',     selected.category],
+              ['Supplier',     selected.supplier],
+              ['Department',   selected.department],
+              ['Quantity',     `${selected.quantity} ${selected.unit}`],
+              ['Unit Cost',    `₹${Number(selected.unitCost || 0).toLocaleString()}`],
+              ['Total Cost',   `₹${(selected.quantity * selected.unitCost || 0).toLocaleString()}`],
+              ['Priority',     selected.priority],
+              ['Expected',     selected.expectedDate || '—'],
               ['Requested By', selected.requestedBy || '—'],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
@@ -407,9 +421,7 @@ export default function Procurement() {
               </div>
             )}
           </div>
-
-          {/* Quick Status Update */}
-          {!['delivered', 'cancelled'].includes(selected.status) && (
+          {!['delivered','cancelled'].includes(selected.status) && (
             <div style={{ marginTop: 20 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>Update Status</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -418,7 +430,7 @@ export default function Procurement() {
                   const Icon = cfg.icon;
                   return (
                     <button key={s} onClick={() => handleStatusChange(selected, s)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 12, fontSize: 13, fontWeight: 600, color: cfg.color, cursor: 'pointer', transition: '.15s' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 12, fontSize: 13, fontWeight: 600, color: cfg.color, cursor: 'pointer' }}>
                       <Icon size={15} /> Mark as {cfg.label}
                     </button>
                   );

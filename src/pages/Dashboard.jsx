@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { collection, getCountFromServer, query, where } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
 
 const STOCK_DATA = [
   { month: 'Aug', in: 420, out: 310 },
@@ -10,11 +12,11 @@ const STOCK_DATA = [
 ];
 
 const ACTIVITY = [
-  { action: 'Issued',    name: 'Dell OptiPlex 7090',   dept: 'CS Lab',       time: '2 min ago',  color: '#eff6ff', text: '#1d4ed8' },
-  { action: 'Returned',  name: 'Oscilloscope DS1054Z', dept: 'Electronics',  time: '18 min ago', color: '#f0fdf4', text: '#166534' },
-  { action: 'Restocked', name: 'PVC Conduit (50m)',    dept: 'Store',        time: '1 hr ago',   color: '#f5f3ff', text: '#5b21b6' },
-  { action: 'Pending',   name: 'Projector BenQ MX522', dept: 'Seminar Hall', time: '2 hr ago',   color: '#fffbeb', text: '#92400e' },
-  { action: 'Approved',  name: 'Lab Coat (Batch)',     dept: 'Chemistry',    time: '3 hr ago',   color: '#f0fdf4', text: '#065f46' },
+  { action: 'Issued',    name: 'Dell OptiPlex 7090',    dept: 'CS Lab',       time: '2 min ago',  color: '#eff6ff', text: '#1d4ed8' },
+  { action: 'Returned',  name: 'Oscilloscope DS1054Z',  dept: 'Electronics',  time: '18 min ago', color: '#f0fdf4', text: '#166534' },
+  { action: 'Restocked', name: 'PVC Conduit (50m)',      dept: 'Store',        time: '1 hr ago',   color: '#f5f3ff', text: '#5b21b6' },
+  { action: 'Pending',   name: 'Projector BenQ MX522',  dept: 'Seminar Hall', time: '2 hr ago',   color: '#fffbeb', text: '#92400e' },
+  { action: 'Approved',  name: 'Lab Coat (Batch)',       dept: 'Chemistry',    time: '3 hr ago',   color: '#f0fdf4', text: '#065f46' },
 ];
 
 const LOW_STOCK = [
@@ -37,8 +39,28 @@ const KPICard = ({ icon, label, value, sub, trend, bg }) => (
 );
 
 const Dashboard = () => {
-  const stats = { totalAssets: 1247, lowStock: 14, pendingApprovals: 7, activeIssued: 342 };
+  const [stats, setStats] = useState({ totalAssets: 1247, lowStock: 14, pendingApprovals: 7, activeIssued: 342 });
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [a, l, p, i] = await Promise.all([
+          getCountFromServer(collection(db, 'assets')),
+          getCountFromServer(query(collection(db, 'assets'), where('quantity', '<=', 10))),
+          getCountFromServer(query(collection(db, 'approvals'), where('status', '==', 'pending'))),
+          getCountFromServer(query(collection(db, 'assets'), where('status', '==', 'issued'))),
+        ]);
+        setStats({
+          totalAssets:      a.data().count || 1247,
+          lowStock:         l.data().count || 14,
+          pendingApprovals: p.data().count || 7,
+          activeIssued:     i.data().count || 342,
+        });
+      } catch { /* fallback to demo data */ }
+    };
+    fetchStats();
+  }, []);
 
   return (
     <div>
@@ -46,7 +68,7 @@ const Dashboard = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Operations Overview</h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>{today}</p>
+          <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>TraceSphere · {today}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#166534' }}>
           🟢 All Systems Operational
@@ -95,7 +117,9 @@ const Dashboard = () => {
             <circle cx="60" cy="60" r="40" fill="none" stroke="#06b6d4" strokeWidth="20" strokeDasharray="55 196" strokeDashoffset="-155"/>
             <circle cx="60" cy="60" r="40" fill="none" stroke="#f59e0b" strokeWidth="20" strokeDasharray="25 226" strokeDashoffset="-210"/>
             <circle cx="60" cy="60" r="40" fill="none" stroke="#10b981" strokeWidth="20" strokeDasharray="16 235" strokeDashoffset="-235"/>
-            <text x="60" y="64" textAnchor="middle" fontSize="10" fontWeight="700" fill="#1e293b">1,247</text>
+            <text x="60" y="64" textAnchor="middle" fontSize="10" fontWeight="700" fill="#1e293b">
+              {stats.totalAssets.toLocaleString()}
+            </text>
           </svg>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {[['#3b82f6','Lab Equipment','34%'],['#8b5cf6','Consumables','28%'],['#06b6d4','Fixed Assets','22%'],['#f59e0b','Construction','10%'],['#10b981','Digital','6%']].map(([c,l,v]) => (

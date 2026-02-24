@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback} from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   collection, addDoc, updateDoc, doc,
   onSnapshot, serverTimestamp, query, orderBy, limit
@@ -6,12 +6,10 @@ import {
 import { db, auth } from '../services/firebaseConfig';
 import {
   CheckCircle2, XCircle, Clock, Plus, X, Loader2,
-  ClipboardCheck, Package, User, Calendar, MessageSquare,
-  AlertTriangle, ChevronDown, Filter
+  User, Calendar, MessageSquare
 } from 'lucide-react';
 
-const q = query(collection(db, 'approvals'), orderBy('createdAt', 'desc'), limit(50));
-
+// ── Constants ─────────────────────────────────────────────────────────────
 const PRIORITY = {
   high:   'bg-red-50 text-red-600 border-red-200',
   medium: 'bg-amber-50 text-amber-600 border-amber-200',
@@ -19,9 +17,9 @@ const PRIORITY = {
 };
 
 const STATUS_CONFIG = {
-  pending:  { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock,         label: 'Pending' },
+  pending:  { color: 'bg-amber-50 text-amber-700 border-amber-200',     icon: Clock,         label: 'Pending'  },
   approved: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2, label: 'Approved' },
-  rejected: { color: 'bg-red-50 text-red-600 border-red-200', icon: XCircle,      label: 'Rejected' },
+  rejected: { color: 'bg-red-50 text-red-600 border-red-200',            icon: XCircle,      label: 'Rejected' },
 };
 
 const EMPTY_REQ = {
@@ -29,13 +27,25 @@ const EMPTY_REQ = {
   reason: '', priority: 'medium', department: '', estimatedCost: ''
 };
 
+// ── Shared — outside components to prevent cursor loss ────────────────────
+const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition";
+
+const Field = ({ label, children }) => (
+  <div>
+    <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1">{label}</label>
+    {children}
+  </div>
+);
+
+// ── Demo Data ─────────────────────────────────────────────────────────────
 const DEMO_APPROVALS = [
-  { id: 'REQ-001', itemName: 'Printer Toner HP 85A', quantity: 10, unit: 'box', category: 'Consumables', reason: 'Stock critically low in admin office. Needed for semester-end report printing.', priority: 'high', department: 'Admin', estimatedCost: '12000', status: 'pending', requestedBy: 'Ravi Kumar', requestedAt: '2024-02-15', comments: '' },
-  { id: 'REQ-002', itemName: 'Arduino Mega 2560',    quantity: 15, unit: 'pcs', category: 'Lab Equipment', reason: 'Required for embedded systems lab sessions in Feb–March.', priority: 'medium', department: 'Electronics', estimatedCost: '18000', status: 'approved', requestedBy: 'Priya Nair', requestedAt: '2024-02-14', comments: 'Approved. PO raised.' },
-  { id: 'REQ-003', itemName: 'Safety Goggles',       quantity: 30, unit: 'pcs', category: 'Consumables', reason: 'Current stock damaged, mandatory for lab safety compliance.', priority: 'high', department: 'Chemistry', estimatedCost: '4500', status: 'pending', requestedBy: 'Dr. Mehta', requestedAt: '2024-02-13', comments: '' },
-  { id: 'REQ-004', itemName: 'UPS 1KVA APC',         quantity: 5,  unit: 'pcs', category: 'Fixed Assets', reason: 'Server room needs power backup upgrade.', priority: 'low', department: 'IT', estimatedCost: '25000', status: 'rejected', requestedBy: 'Suresh IT', requestedAt: '2024-02-12', comments: 'Budget not available this quarter.' },
+  { id: 'REQ-001', itemName: 'Printer Toner HP 85A', quantity: 10, unit: 'box', category: 'Consumables',  reason: 'Stock critically low in admin office. Needed for semester-end report printing.', priority: 'high',   department: 'Admin',       estimatedCost: '12000', status: 'pending',  requestedBy: 'Ravi Kumar', requestedAt: '2024-02-15', comments: '' },
+  { id: 'REQ-002', itemName: 'Arduino Mega 2560',    quantity: 15, unit: 'pcs', category: 'Lab Equipment', reason: 'Required for embedded systems lab sessions in Feb–March.',                      priority: 'medium', department: 'Electronics', estimatedCost: '18000', status: 'approved', requestedBy: 'Priya Nair', requestedAt: '2024-02-14', comments: 'Approved. PO raised.' },
+  { id: 'REQ-003', itemName: 'Safety Goggles',       quantity: 30, unit: 'pcs', category: 'Consumables',  reason: 'Current stock damaged, mandatory for lab safety compliance.',                   priority: 'high',   department: 'Chemistry',   estimatedCost: '4500',  status: 'pending',  requestedBy: 'Dr. Mehta',  requestedAt: '2024-02-13', comments: '' },
+  { id: 'REQ-004', itemName: 'UPS 1KVA APC',         quantity: 5,  unit: 'pcs', category: 'Fixed Assets',  reason: 'Server room needs power backup upgrade.',                                      priority: 'low',    department: 'IT',          estimatedCost: '25000', status: 'rejected', requestedBy: 'Suresh IT',  requestedAt: '2024-02-12', comments: 'Budget not available this quarter.' },
 ];
 
+// ── Request Modal ─────────────────────────────────────────────────────────
 function RequestModal({ onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_REQ);
   const [saving, setSaving] = useState(false);
@@ -48,14 +58,6 @@ function RequestModal({ onClose, onSave }) {
     setSaving(false);
     onClose();
   };
-
-  const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition";
-  const Field = ({ label, children }) => (
-    <div>
-      <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1">{label}</label>
-      {children}
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -79,7 +81,15 @@ function RequestModal({ onClose, onSave }) {
               <input value={form.unit} onChange={e => set('unit', e.target.value)} className={inputCls} placeholder="pcs / box / kg"/>
             </Field>
             <Field label="Department">
-              <input value={form.department} onChange={e => set('department', e.target.value)} className={inputCls} placeholder="Your department"/>
+              <input value={form.department} onChange={e => set('department', e.target.value)} className={inputCls} placeholder="Your department" list="dept-list"/>
+              <datalist id="dept-list">
+                <option value="Computer Science"/>
+                <option value="Electronics & Communication"/>
+                <option value="Mechanical"/>
+                <option value="Civil"/>
+                <option value="Admin"/>
+                <option value="Library"/>
+              </datalist>
             </Field>
             <Field label="Est. Cost (₹)">
               <input type="number" value={form.estimatedCost} onChange={e => set('estimatedCost', e.target.value)} className={inputCls} placeholder="0"/>
@@ -118,11 +128,12 @@ function RequestModal({ onClose, onSave }) {
   );
 }
 
+// ── Approval Card ─────────────────────────────────────────────────────────
 const ApprovalCard = React.memo(function ApprovalCard({ req, onApprove, onReject }) {
-  const [comment, setComment] = useState('');
+  const [comment, setComment]       = useState('');
   const [showComment, setShowComment] = useState(false);
-  const [acting, setActing] = useState(null);
-  const cfg = STATUS_CONFIG[req.status];
+  const [acting, setActing]         = useState(null);
+  const cfg  = STATUS_CONFIG[req.status] || STATUS_CONFIG.pending;
   const Icon = cfg.icon;
 
   const act = async (action) => {
@@ -181,13 +192,11 @@ const ApprovalCard = React.memo(function ApprovalCard({ req, onApprove, onReject
             </button>
             <button onClick={() => act('reject')} disabled={!!acting}
               className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-red-200 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors">
-              {acting === 'reject' ? <Loader2 size={13} className="animate-spin"/> : <XCircle size={13}/>}
-              Reject
+              {acting === 'reject' ? <Loader2 size={13} className="animate-spin"/> : <XCircle size={13}/>} Reject
             </button>
             <button onClick={() => act('approve')} disabled={!!acting}
               className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors">
-              {acting === 'approve' ? <Loader2 size={13} className="animate-spin"/> : <CheckCircle2 size={13}/>}
-              Approve
+              {acting === 'approve' ? <Loader2 size={13} className="animate-spin"/> : <CheckCircle2 size={13}/>} Approve
             </button>
           </div>
         </div>
@@ -196,14 +205,15 @@ const ApprovalCard = React.memo(function ApprovalCard({ req, onApprove, onReject
   );
 });
 
+// ── Main Approvals Page ───────────────────────────────────────────────────
 export default function Approvals() {
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [requests, setRequests]   = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [filter, setFilter]     = useState('all');
+  const [filter, setFilter]       = useState('all');
 
   useEffect(() => {
-    const q = query(collection(db, 'approvals'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'approvals'), orderBy('createdAt', 'desc'), limit(50));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
       setRequests(data.length ? data : DEMO_APPROVALS);
@@ -216,16 +226,20 @@ export default function Approvals() {
   }, []);
 
   const handleSave = async (form) => {
+    // close modal immediately
+    setShowModal(false);
     const user = auth.currentUser;
-    await addDoc(collection(db, 'approvals'), {
-      ...form,
-      id: `REQ-${Date.now().toString().slice(-4)}`,
-      status: 'pending',
-      requestedBy: user?.displayName || user?.email || 'Unknown',
-      requestedAt: new Date().toISOString().split('T')[0],
-      comments: '',
-      createdAt: serverTimestamp(),
-    });
+    try {
+      await addDoc(collection(db, 'approvals'), {
+        ...form,
+        id: `REQ-${Date.now().toString().slice(-4)}`,
+        status: 'pending',
+        requestedBy: user?.displayName || user?.email || 'Unknown',
+        requestedAt: new Date().toISOString().split('T')[0],
+        comments: '',
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) { console.error('Save failed:', e); }
   };
 
   const handleApprove = useCallback(async (req, comment) => {
@@ -236,7 +250,7 @@ export default function Approvals() {
     } else {
       setRequests(r => r.map(x => x.id === req.id ? { ...x, status: 'approved', comments: comment } : x));
     }
-  },[]);
+  }, []);
 
   const handleReject = useCallback(async (req, comment) => {
     if (req.firestoreId && !req._demo) {
@@ -246,18 +260,18 @@ export default function Approvals() {
     } else {
       setRequests(r => r.map(x => x.id === req.id ? { ...x, status: 'rejected', comments: comment } : x));
     }
-  },[]);
+  }, []);
 
   const counts = useMemo(() => ({
-  all: requests.length,
-  pending:  requests.filter(r => r.status === 'pending').length,
-  approved: requests.filter(r => r.status === 'approved').length,
-  rejected: requests.filter(r => r.status === 'rejected').length,
-}), [requests]);
+    all:      requests.length,
+    pending:  requests.filter(r => r.status === 'pending').length,
+    approved: requests.filter(r => r.status === 'approved').length,
+    rejected: requests.filter(r => r.status === 'rejected').length,
+  }), [requests]);
 
-const filtered = useMemo(() => 
-  filter === 'all' ? requests : requests.filter(r => r.status === filter),
-[requests, filter]);
+  const filtered = useMemo(() =>
+    filter === 'all' ? requests : requests.filter(r => r.status === filter),
+  [requests, filter]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -272,7 +286,7 @@ const filtered = useMemo(() =>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Approval Workflows</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Purchase requisitions and procurement approvals</p>
+          <p className="text-sm text-gray-400 mt-0.5">TraceSphere · Purchase requisitions and procurement approvals</p>
         </div>
         <button onClick={() => setShowModal(true)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-lg shadow-blue-200">
@@ -283,13 +297,13 @@ const filtered = useMemo(() =>
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Total',    key: 'all',      color: 'text-gray-900', bg: 'bg-gray-50' },
-          { label: 'Pending',  key: 'pending',  color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Approved', key: 'approved', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: 'Rejected', key: 'rejected', color: 'text-red-500', bg: 'bg-red-50' },
+          { label: 'Total',    key: 'all',      color: 'text-gray-900'    },
+          { label: 'Pending',  key: 'pending',  color: 'text-amber-600'   },
+          { label: 'Approved', key: 'approved', color: 'text-emerald-600' },
+          { label: 'Rejected', key: 'rejected', color: 'text-red-500'     },
         ].map(s => (
           <button key={s.key} onClick={() => setFilter(s.key)}
-            className={`p-4 rounded-2xl border text-left transition-all ${filter === s.key ? 'border-blue-300 shadow-md shadow-blue-100' : 'border-gray-100 bg-white hover:shadow-sm'}`}>
+            className={`p-4 rounded-2xl border text-left transition-all ${filter === s.key ? 'border-blue-300 shadow-md shadow-blue-100 bg-white' : 'border-gray-100 bg-white hover:shadow-sm'}`}>
             <p className={`text-2xl font-bold ${s.color}`}>{counts[s.key]}</p>
             <p className="text-xs font-semibold text-gray-500 mt-0.5">{s.label}</p>
           </button>

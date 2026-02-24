@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   collection, addDoc, updateDoc, deleteDoc,
   doc, onSnapshot, serverTimestamp, query, orderBy, limit
@@ -27,6 +27,16 @@ const EMPTY_FORM = {
   department: '', description: '', purchaseDate: '', cost: ''
 };
 
+// ── Shared — must be OUTSIDE all components to prevent cursor loss ─────────
+const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition";
+
+const Field = ({ label, children }) => (
+  <div>
+    <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1">{label}</label>
+    {children}
+  </div>
+);
+
 // ── QR Code Modal ─────────────────────────────────────────────────────────
 function QRModal({ asset, onClose }) {
   const qrData = encodeURIComponent(JSON.stringify({ id: asset.assetId, name: asset.name, location: asset.location }));
@@ -41,7 +51,7 @@ function QRModal({ asset, onClose }) {
       <h2>${asset.name}</h2>
       <p>${asset.assetId} · ${asset.location}</p>
       <img src="${qrUrl}" style="margin:20px auto;display:block"/>
-      <p>TraceSphere · Chennai Institute of Technology · ${new Date().toLocaleDateString()}</p>
+      <p>TraceSphere · ${new Date().toLocaleDateString()}</p>
       <script>window.onload=()=>window.print()</script>
       </body></html>
     `);
@@ -83,19 +93,9 @@ function AssetModal({ asset, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await onSave(form);
+    await onSave({ ...form, firestoreId: asset?.firestoreId, _demo: asset?._demo });
     setSaving(false);
-    onClose();
   };
-
-  const Field = ({ label, children }) => (
-    <div>
-      <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1">{label}</label>
-      {children}
-    </div>
-  );
-
-  const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition";
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -115,8 +115,6 @@ function AssetModal({ asset, onClose, onSave }) {
               <input required value={form.assetId} onChange={e => set('assetId', e.target.value)}
                 className={inputCls} placeholder="e.g. AST-0001" />
             </Field>
-
-            {/* Category — type or pick */}
             <Field label="Category">
               <input value={form.category} onChange={e => set('category', e.target.value)}
                 className={inputCls} placeholder="e.g. Lab Equipment" list="category-list" />
@@ -124,8 +122,6 @@ function AssetModal({ asset, onClose, onSave }) {
                 {CATEGORIES.map(c => <option key={c} value={c} />)}
               </datalist>
             </Field>
-
-            {/* Location — type or pick */}
             <Field label="Location">
               <input value={form.location} onChange={e => set('location', e.target.value)}
                 className={inputCls} placeholder="e.g. CS Lab" list="location-list" />
@@ -133,7 +129,6 @@ function AssetModal({ asset, onClose, onSave }) {
                 {LOCATIONS.map(l => <option key={l} value={l} />)}
               </datalist>
             </Field>
-
             <Field label="Quantity">
               <input type="number" min="0" value={form.quantity} onChange={e => set('quantity', Number(e.target.value))}
                 className={inputCls} />
@@ -146,8 +141,6 @@ function AssetModal({ asset, onClose, onSave }) {
               <input value={form.unit} onChange={e => set('unit', e.target.value)}
                 className={inputCls} placeholder="pcs / kg / m / box" />
             </Field>
-
-            {/* Status — type or pick */}
             <Field label="Status">
               <input value={form.status} onChange={e => set('status', e.target.value)}
                 className={inputCls} placeholder="e.g. available" list="status-list" />
@@ -155,7 +148,6 @@ function AssetModal({ asset, onClose, onSave }) {
                 {STATUSES.map(s => <option key={s} value={s} />)}
               </datalist>
             </Field>
-
             <Field label="Department">
               <input value={form.department} onChange={e => set('department', e.target.value)}
                 className={inputCls} placeholder="e.g. Computer Science" list="dept-list" />
@@ -243,15 +235,15 @@ const AssetRow = React.memo(function AssetRow({ asset, onEdit, onDelete, onQr })
 
 // ── Main Inventory Page ───────────────────────────────────────────────────
 export default function Inventory() {
-  const [assets, setAssets]                     = useState([]);
-  const [loading, setLoading]                   = useState(true);
-  const [search, setSearch]                     = useState('');
-  const [debouncedSearch, setDebouncedSearch]   = useState('');
-  const [filterCat, setFilterCat]               = useState('All');
-  const [filterStatus, setFilterStatus]         = useState('All');
-  const [showModal, setShowModal]               = useState(false);
-  const [editAsset, setEditAsset]               = useState(null);
-  const [qrAsset, setQrAsset]                   = useState(null);
+  const [assets, setAssets]                   = useState([]);
+  const [loading, setLoading]                 = useState(true);
+  const [search, setSearch]                   = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterCat, setFilterCat]             = useState('All');
+  const [filterStatus, setFilterStatus]       = useState('All');
+  const [showModal, setShowModal]             = useState(false);
+  const [editAsset, setEditAsset]             = useState(null);
+  const [qrAsset, setQrAsset]                 = useState(null);
 
   // ── Debounce search ───────────────────────────────────────────────────
   useEffect(() => {
@@ -275,13 +267,17 @@ export default function Inventory() {
 
   // ── CRUD ──────────────────────────────────────────────────────────────
   const handleSave = useCallback(async (form) => {
-    if (editAsset?.firestoreId) {
-      await updateDoc(doc(db, 'assets', editAsset.firestoreId), { ...form, updatedAt: serverTimestamp() });
-    } else {
-      await addDoc(collection(db, 'assets'), { ...form, createdAt: serverTimestamp() });
-    }
+    // close modal immediately — don't wait for Firestore
+    setShowModal(false);
     setEditAsset(null);
-  }, [editAsset]);
+    try {
+      if (form.firestoreId && !form._demo) {
+        await updateDoc(doc(db, 'assets', form.firestoreId), { ...form, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, 'assets'), { ...form, createdAt: serverTimestamp() });
+      }
+    } catch (e) { console.error('Save failed:', e); }
+  }, []);
 
   const handleDelete = useCallback(async (asset) => {
     if (!window.confirm(`Delete "${asset.name}"?`)) return;
@@ -313,7 +309,7 @@ export default function Inventory() {
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a'); a.href = url; a.download = 'cit-inventory.csv'; a.click();
+    const a    = document.createElement('a'); a.href = url; a.download = 'tracesphere-inventory.csv'; a.click();
   };
 
   if (loading) return (
@@ -414,14 +410,14 @@ export default function Inventory() {
   );
 }
 
-// ── Demo Data — CIT Chennai ───────────────────────────────────────────────
+// ── Demo Data ─────────────────────────────────────────────────────────────
 const DEMO_ASSETS = [
-  { firestoreId: 'd1', _demo: true, assetId: 'CIT-0001', name: 'Dell OptiPlex 7090',         category: 'Fixed Assets',  location: 'CS Lab',        quantity: 20, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Computer Science',          description: 'Core i7, 16GB RAM', purchaseDate: '2023-06-15', cost: '45000' },
-  { firestoreId: 'd2', _demo: true, assetId: 'CIT-0002', name: 'Digital Oscilloscope',        category: 'Lab Equipment', location: 'ECE Lab',        quantity: 8,  minQuantity: 2,  unit: 'pcs', status: 'issued',      department: 'Electronics & Communication', description: '4-channel 50MHz',   purchaseDate: '2022-11-20', cost: '28000' },
-  { firestoreId: 'd3', _demo: true, assetId: 'CIT-0003', name: 'Printer Toner HP 85A',        category: 'Consumables',   location: 'Admin Block',   quantity: 3,  minQuantity: 10, unit: 'box', status: 'available',   department: 'Admin',                     description: '',                  purchaseDate: '2024-01-10', cost: '1200'  },
-  { firestoreId: 'd4', _demo: true, assetId: 'CIT-0004', name: 'Projector BenQ MX522',        category: 'Fixed Assets',  location: 'Seminar Hall',  quantity: 4,  minQuantity: 2,  unit: 'pcs', status: 'maintenance', department: 'Admin',                     description: 'XGA 3300 lumens',   purchaseDate: '2021-08-05', cost: '35000' },
-  { firestoreId: 'd5', _demo: true, assetId: 'CIT-0005', name: 'Vernier Caliper',             category: 'Lab Equipment', location: 'Mechanical Lab',quantity: 15, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Mechanical',                description: '0-150mm range',     purchaseDate: '2023-03-10', cost: '2500'  },
-  { firestoreId: 'd6', _demo: true, assetId: 'CIT-0006', name: 'AutoCAD Workstation',         category: 'Fixed Assets',  location: 'Civil Lab',     quantity: 10, minQuantity: 3,  unit: 'pcs', status: 'available',   department: 'Civil',                     description: 'Licensed AutoCAD',  purchaseDate: '2023-07-22', cost: '55000' },
-  { firestoreId: 'd7', _demo: true, assetId: 'CIT-0007', name: 'Arduino Uno Kit',             category: 'Lab Equipment', location: 'ECE Lab',        quantity: 25, minQuantity: 10, unit: 'pcs', status: 'available',   department: 'Electronics & Communication', description: 'With breadboard',   purchaseDate: '2024-01-05', cost: '800'   },
-  { firestoreId: 'd8', _demo: true, assetId: 'CIT-0008', name: 'Whiteboard Markers (Box)',    category: 'Consumables',   location: 'Main Block',    quantity: 9,  minQuantity: 30, unit: 'box', status: 'available',   department: 'Admin',                     description: 'Multicolor set',   purchaseDate: '2024-02-01', cost: '350'   },
+  { firestoreId: 'd1', _demo: true, assetId: 'TS-0001', name: 'Dell OptiPlex 7090',       category: 'Fixed Assets',  location: 'CS Lab',         quantity: 20, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Computer Science',            description: 'Core i7, 16GB RAM', purchaseDate: '2023-06-15', cost: '45000' },
+  { firestoreId: 'd2', _demo: true, assetId: 'TS-0002', name: 'Digital Oscilloscope',      category: 'Lab Equipment', location: 'ECE Lab',         quantity: 8,  minQuantity: 2,  unit: 'pcs', status: 'issued',      department: 'Electronics & Communication', description: '4-channel 50MHz',   purchaseDate: '2022-11-20', cost: '28000' },
+  { firestoreId: 'd3', _demo: true, assetId: 'TS-0003', name: 'Printer Toner HP 85A',      category: 'Consumables',   location: 'Admin Block',    quantity: 3,  minQuantity: 10, unit: 'box', status: 'available',   department: 'Admin',                       description: '',                  purchaseDate: '2024-01-10', cost: '1200'  },
+  { firestoreId: 'd4', _demo: true, assetId: 'TS-0004', name: 'Projector BenQ MX522',      category: 'Fixed Assets',  location: 'Seminar Hall',   quantity: 4,  minQuantity: 2,  unit: 'pcs', status: 'maintenance', department: 'Admin',                       description: 'XGA 3300 lumens',   purchaseDate: '2021-08-05', cost: '35000' },
+  { firestoreId: 'd5', _demo: true, assetId: 'TS-0005', name: 'Vernier Caliper',            category: 'Lab Equipment', location: 'Mechanical Lab', quantity: 15, minQuantity: 5,  unit: 'pcs', status: 'available',   department: 'Mechanical',                  description: '0-150mm range',     purchaseDate: '2023-03-10', cost: '2500'  },
+  { firestoreId: 'd6', _demo: true, assetId: 'TS-0006', name: 'AutoCAD Workstation',        category: 'Fixed Assets',  location: 'Civil Lab',      quantity: 10, minQuantity: 3,  unit: 'pcs', status: 'available',   department: 'Civil',                       description: 'Licensed AutoCAD',  purchaseDate: '2023-07-22', cost: '55000' },
+  { firestoreId: 'd7', _demo: true, assetId: 'TS-0007', name: 'Arduino Uno Kit',            category: 'Lab Equipment', location: 'ECE Lab',         quantity: 25, minQuantity: 10, unit: 'pcs', status: 'available',   department: 'Electronics & Communication', description: 'With breadboard',   purchaseDate: '2024-01-05', cost: '800'   },
+  { firestoreId: 'd8', _demo: true, assetId: 'TS-0008', name: 'Whiteboard Markers (Box)',   category: 'Consumables',   location: 'Main Block',     quantity: 9,  minQuantity: 30, unit: 'box', status: 'available',   department: 'Admin',                       description: 'Multicolor set',    purchaseDate: '2024-02-01', cost: '350'   },
 ];

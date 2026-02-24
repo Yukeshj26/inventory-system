@@ -12,16 +12,29 @@ import Reports  from './pages/Reports';
 import Settings from './pages/Settings';
 
 function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+  const cached = localStorage.getItem('authUser');
+  return cached ? JSON.parse(cached) : null;
+});
+const [loading, setLoading] = useState(!localStorage.getItem('authUser'));
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+ useEffect(() => {
+  const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+    if (firebaseUser) {
+      localStorage.setItem('authUser', JSON.stringify({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+      }));
+    } else {
+      localStorage.removeItem('authUser');
+    }
+    setUser(firebaseUser);
+    setLoading(false);
+  });
+  return () => unsubscribe();
+}, []);
 
   if (loading) return (
     <div className="flex h-screen items-center justify-center">

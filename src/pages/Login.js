@@ -6,6 +6,7 @@ import { auth } from '../services/firebaseConfig';
 import { ShieldCheck, Mail, Lock, Loader2, UserPlus, LogIn, KeyRound, ArrowLeft } from 'lucide-react';
 
 // view: 'login' | 'signup' | 'forgot'
+const inputCls = "w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition";
 const Login = () => {
   const [view, setView] = useState('login');
   const [email, setEmail] = useState('');
@@ -24,10 +25,11 @@ const Login = () => {
   const handleGoogleLogin = async () => {
     if (loading) return;
     setLoading(true);
-    try {
-      await signInWithGoogle();
-      navigate('/dashboard');
-    } catch (error) {
+try {
+  const user = await signInWithGoogle();
+  localStorage.setItem('authUser', JSON.stringify({ uid: user.uid, email: user.email }));
+  navigate('/');
+} catch (error) {
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         console.error(error);
       }
@@ -40,10 +42,11 @@ const Login = () => {
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      await loginEmail(email, password);
-      navigate('/dashboard');
-    } catch (error) {
+try {
+  const result = await loginEmail(email, password);
+  localStorage.setItem('authUser', JSON.stringify({ uid: result.user.uid, email: result.user.email }));
+  navigate('/');
+} catch (error) {
       switch (error.code) {
         case 'auth/user-not-found':   setMessage('No account found with this email.'); break;
         case 'auth/wrong-password':
@@ -61,10 +64,11 @@ const Login = () => {
     if (password !== confirmPassword) { setMessage('Passwords do not match.'); return; }
     if (password.length < 6) { setMessage('Password must be at least 6 characters.'); return; }
     setLoading(true);
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      navigate('/dashboard');
-    } catch (error) {
+try {
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  localStorage.setItem('authUser', JSON.stringify({ uid: result.user.uid, email: result.user.email }));
+  navigate('/');
+} catch (error) {
       switch (error.code) {
         case 'auth/email-already-in-use': setMessage('An account with this email already exists.'); break;
         case 'auth/invalid-email':        setMessage('Invalid email address.'); break;
@@ -92,8 +96,6 @@ const Login = () => {
       setLoading(false);
     }
   };
-
-  const inputCls = "w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition";
 
   return (
     <div className="flex min-h-screen bg-white">
@@ -280,3 +282,8 @@ const Login = () => {
 };
 
 export default Login;
+export const loginEmail = async (email, password) => {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  await syncUserWithFirestore(result.user);
+  return result;
+};
